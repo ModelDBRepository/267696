@@ -1,0 +1,128 @@
+#
+# This is point-cell model of astrocytic Vm dynamics, includong glial Kir, K2P, leak conductance and constant GJC current
+#
+# The model introduces for the first time a complex form of glial weakly-rectifying Kir current 
+#
+# NEW IN THIS .ODE
+# I_kir_res modeled using carrier model for voltage modlation of Mg2+ block, Adrian's paper, eq. 12.1
+# Ko dependance in Kir permeability added. 
+
+
+# Glial GJC current, net current
+# par iext_gjc=0.1
+par iext_gjc=0.22
+
+# Glia common param's
+# ===================
+# Leak-conductance, unspecificic, in microSiemens
+par g_al=0.0013
+
+# Nominal extracell. concentrations, common to neurons and glia
+par Ko=2.5
+par Ko_nom=2.5
+# constant [K]_in, infinite buffer assumpt. for astrocyte network
+par Kin_a=130
+                                      
+
+#Glial capacitance, effective in nanofarads, from Seifert's table
+par C_a=0.02
+number F=96485
+
+
+# Astroglial Kir parameters
+# ========================
+# Ikir_inw
+# ------------------------
+# par P_Kir=9.485e-08  ... (old) constant value
+par P_Kir_max=3.7849e-07
+par S_Kir=0.23
+
+# par d=0.4887 ... fited value
+par d=0.5
+par v0=-45.62
+par zBA=0.4787
+par z_Kir=1.148
+
+E_k_a=25.7*log((Ko/Kin_a))
+aux Eka=E_k_a
+
+# for Ohmic fitting, Ek offset +7mV at 5mM, Erev=-76,... not used
+# par Ek_ofs=7
+# Erev_kir=E_k_a+Ek_ofs
+
+
+# Ik2p sigmoidal activation glia, extended with [K]_o dependence
+par A_k2p = 1.014
+par V12_k2p_no = -20.5
+par S_fac=1.7
+par z_k2p = 1.0
+par tau_k2p=3
+# tau_k2p (voltage independent) defining unimodal n(Va) activation of K2P surrent, first-order kinetics, tau_n=3 msec
+
+# Extended GHK term (incl. P_Na permeability)
+par P_k2p_no=1.24e-08
+par PnaPk2p=0.061
+par b_k2p=-5.0
+par c_k2p=5.0
+par z_ghk=1.0
+par k=2.0
+par vs=1.0
+par k2pScal=1.0
+
+
+# Driving force Va-E_k_a for monitoring
+aux vasum=Va-E_k_a
+
+
+# Glial Kir curent - Adrian, eq. 12.1, Goldman current equation 
+# =============================================================
+P_Kir=P_Kir_max*(1+S_Kir*log(Ko/Kin_a))
+I_kir=96480*P_Kir*(Kin_a-Ko*exp(-z_Kir*Va/25.7))/(exp(-(d*(zBA+z_Kir)*(Va-v0)/25.7))+1)
+aux Ikir=I_kir
+
+
+# Glial K2P, ext. with P_Na and [K]_o dependance 
+# =================
+V12_k2p = V12_k2p_no-S_fac*25.7*log(Ko/Ko_nom)
+n_k2p_stdy=(A_k2p-Ko/Kin_a)/(1+exp(-z_k2p*(Va-V12_k2p)/25.7))
+P_k2p=P_k2p_no*(1+0.85*log10(Ko/Ko_nom))
+I_k2p_K=P_k2p*(z_ghk*F*(Va+b_k2p)/25.7)*(Kin_a-Ko*exp(-z_ghk*(Va+b_k2p)/25.7))/(1-exp(-z_ghk*(Va+b_k2p)/25.7))
+#I_k2p_Na=P_k2p*PnaPk2p*(z_k2p*F*(Va+c_k2p)/25.7)*(Nai_a-Nao*exp(-z_ghk*(Va+c_k2p)/25.7))/(1-exp(-z_ghk*(Va+c_k2p)/25.7))
+aux pk2p=P_k2p
+
+#I_k2p=n_a*(I_k2p_K+I_k2p_Na)
+I_k2p=(n_a^k)*I_k2p_K
+# aux ik2p_K=I_k2p_K
+# aux ik2p_Na=I_k2p_Na
+aux ik2p=I_k2p
+ 
+Ia_l=g_al*(Va-E_k_a)
+aux ial=Ia_l 
+
+
+
+# Eff capacitance of 20pF is used, instead of scalling to density /cm2
+# Ikir attenuation
+par aten=0.85
+# Total glial current, Iglia
+Iglia=aten*I_kir+k2pScal*I_k2p+Ia_l
+aux Ig=Iglia
+
+
+# Differential equations
+# ======================
+Va'=(1.0/C_a)*(iext_gjc-Iglia)
+n_a'=(n_k2p_stdy-n_a)/tau_k2p
+
+init Va=-45
+init n_a=0.685
+#init Va=-80
+#init n_a=0.05
+
+@ TOTAL=50,BOUND=200
+@ xlo=0,xhi=50,ylo=-110.0,yhi=20.0
+@ xplot=t,yplot=Va,dt=.01,Nout=20
+
+done
+
+
